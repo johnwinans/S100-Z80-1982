@@ -1,5 +1,8 @@
 # S100-Z80-1982
-A home-brew Z80 CPU card built in 1982
 
-The S-100 interface signals used in this project were implemented based on features present in the
-[Digiac CT-804](https://github.com/johnwinans/digiac-ct-804).
+This repo contains design notes for a home-brew S-100 system built in 1982.
+
+- [CPU](./CPU) card
+- [RAM](./RAM) cards
+- [boot2_v85](./boot2_v85) is a dump of the boot ROM used to boot from a floppy disc.
+- [boot_test](./boot_test) test applications used to test the refurbished CPU card.
