@@ -20,6 +20,12 @@
 ;
 ;**************************************************************************
 
+; On reset, the ROM at 0000h is enabled and the RAM at the same address is disabled.
+; This remains until the first time that the RAM at address 0800h is read (or written),
+; at which point the ROM is disabled and the RAM at address 0000h is enabled.
+; Observation: It is not possible to copy the boot ROM into the RAM at address 0.
+
+
 U1RX:   equ     80h             ; UART 1 RX data
 U1ST:   equ     81h             ; UART 1 status port
 U1TX:   equ     82h             ; UART 1 TX data
@@ -31,22 +37,13 @@ U2TX:   equ     85h
 STKTOP: equ     8000h           ; end of first RAM card
 
 
-        ORG     0000h           ; Z80 reset starting address
+        ; Until the ROM is copied, code must be position independent!!
+
+        ORG     0000h           ; execute from RAM1 after copied from ROM
 
 start:
         di
-        ld      sp,STKTOP       ; set to top of RAM
-
-if 1
-        ; Copy the shadow ROM into RAM at same address
-        ld      hl,0            ; copy from ROM address 0
-        ld      de,0            ;       to RAM address 0
-
-        ld      bc,800h
-;       ld      bc,801h         ; +1 to un-select ROM after last byte
-
-        ldir
-endif
+        ld      sp,STKTOP       ; config a useful stack
 
 loop:
         ld      hl,msg          ; HL = @ of message to print
@@ -58,8 +55,6 @@ delay:
         ld      a,h
         or      l
         jp      nz,delay
-
-;       ld      a,(0800h)       ; disable the boot ROM after the first message
 
         jp      loop            ; go back & print again
 
