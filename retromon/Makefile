@@ -12,8 +12,14 @@ stack_test.bin: stack_test.asm retromon.sym
 	z80asm -i stack_test.asm -o stack_test.bin --list=stack_test.lst --label=stack_test.sym
 	srec_cat stack_test.bin -binary -offset 0x1000 -o stack_test.hex -intel
 
-flash: retromon.bin
-	flash < retromon.bin
+PROFILE=AM28C16A@DIP24		# drop its data transfer speeds and use a wider write-pulse window ?
+
+burn: retromon.bin
+	minipro -p $(PROFILE) -uP -s -w $<
+
+erase:
+	minipro -p "AT28C16@DIP24" -u -P -E
+	minipro -p "AT28C16@DIP24" -b
 
 clean:
 	rm -f *.lst *.sym *.bin *.hex

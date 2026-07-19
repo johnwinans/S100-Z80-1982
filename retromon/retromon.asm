@@ -1,3 +1,6 @@
+RETRO:   EQU     1
+;RETRO:   EQU     0
+
 ;**************************************************************************
 ;
 ;			Z 8 0 - R E T R O !  U T I L I T Y  M O N I T O R
@@ -304,6 +307,8 @@
 .MONSTART:	EQU	0xB000				; Beginning of Monitor (4K byte boundary)
 .SPTR:		EQU	.MONSTART+0x1000	; Stack pointer (beginning of next 4K page)
 .MEMSTART:	EQU	0x0000				; Beginning of RAM/FLASH
+
+if RETRO
 .LOAD_BASE:	EQU	0xC000				; SD card boot loader image location
 .MEM:		EQU	0x3C				; CP/M memory size configuration
 .CPM_BASE:	EQU	(.MEM-7)*1024		; CP/M origin (0xD400 using above values)
@@ -319,6 +324,7 @@ else
 	.BANK:	EQU 0x00		; Valid SRAM banks 0-E
 endif
 ; .RAM128K
+endif   ; RETRO
 
 ; Misc equates
 CR:			EQU	0x0D		; ASCII carriage return
@@ -328,6 +334,8 @@ ESC:		EQU	0x1B		; ASCII escape
 RST1:		EQU	0x0008		; RST1 vector at 0x0008
 BIT7:		EQU 0x80		; MSB set for message string terminator
 .HXRLEN:	EQU	0x10		; Intel hex record length
+
+if RETRO
 .LOAD_BLKS:	EQU	(0x10000-.LOAD_BASE)/512	; SD card number of blocks to load
 
 ; Port assignments for GPIO
@@ -343,7 +351,10 @@ CTC_2:	EQU	0x42			; CTC port 2
 CTC_3:	EQU	0x43			; CTC port 3
 
 ; Port assignments and status for the Z80 SIO
-ADTA:	EQU	0x30			; Channel A data
+;ADTA:	EQU	0x30			; Channel A data
+ARX:    EQU     0x30
+ATX:    EQU     0x30                    ; jrw
+
 BDTA:	EQU	0x31			; Channel B data
 ACTL:	EQU	0x32			; Channel A control
 BCTL:	EQU	0x33			; Channel B control
@@ -370,8 +381,20 @@ GPIO_IN_USER1:		EQU	0x20
 GPIO_IN_SD_DET:		EQU	0x40
 GPIO_IN_SD_MISO:	EQU	0x80
 
+else    ; RETRO
+
+; Port assignments and status for the Z80 SIO
+ARX:	EQU	0x80			; Channel A data RX
+ATX:	EQU	0x82			; Channel A data TX
+ACTL:	EQU	0x81			; Channel A control
+
+TBE:	EQU	0x01			; Transmit buffer empty
+RDA:	EQU	0x80			; Receive data available
+endif   ; RETRO
+
 	ORG	.MEMSTART			; FLASH start location
 
+if RETRO
 ;--------------------------------------------------------------------------
 ; THE SRAM IS NOT READABLE AT THIS POINT
 ;--------------------------------------------------------------------------
@@ -390,12 +413,15 @@ GPIO_IN_SD_MISO:	EQU	0x80
 	LD		BC,.INITEND
 	LDIR					; Copy initialization code from the FLASH into
 							;	SRAM at the same address
+endif   ; RETRO
 
 	LD		HL,.INITEND		; Source address (FLASH)
 	LD		DE,.MONSTART	; Destination address (SRAM high bank)
 	LD		BC,.END-.MONSTART
 	LDIR					; Copy monitor code from the FLASH into
 							;	SRAM starting at .MONSTART
+
+if RETRO
 
 ; Disable the FLASH and run from SRAM only from this point on
 	IN		A,(FLASH_DISABLE)	; Dummy-read this port to disable the FLASH
@@ -502,15 +528,23 @@ if .AUTOSD_EN
 	JR		.SDSKIP2		; Else continue checking console
 
 .SKIP_EXIT:
-	IN		A,(ADTA)		; Flush console buffer
+	IN		A,(ARX)		; Flush console buffer
 endif
 ; .AUTOSD_EN
+
+endif   ; RETRO
 
 	JP		.MONSTART		; Jump to monitor now that initialization is complete
 
 .INITEND:					; End of initialization code
 
 	ORG		.MONSTART		; Final SRAM destination location of monitor
+
+if RETRO
+else
+    ; shut off the boot rom
+    ld      a,(0800h)       ; access the second 2K memory region to disable the boot rom
+endif   ; RETRO
 
 ;--------------------------------------------------------------------------
 ; MONIT <X> - monitor entry point
@@ -578,12 +612,27 @@ START:
 	DEFW	BLOAD			; Y -> DDDD CCCC load binary file
 	DEFW	BDUMP			; Z -> LLLL CCCC dump binary file
 
+if RETRO
+else ; RETRO
+
+BDUMP:
+BLOAD:
+SDWRT:
+SDREAD:
+DOBOOT:
+SBANK:
+    CALL    DSPMSG
+    DEFB    'Not Implemented',CR,BIT7+LF
+    RET
+
+endif ; RETRO
 ;**************************************************************************
 ;
 ;					C O M M A N D  S U B R O U T I N E S
 ;
 ;**************************************************************************
 
+if RETRO
 ;--------------------------------------------------------------------------
 ; SBANK <A> - select which low 32K RAM bank to use.
 ;	Valid ranges: 0-E using 512K SRAM, C-E using 128K SRAM
@@ -724,6 +773,7 @@ DOBOOT_AUTO:
 	JP		Z,.LOAD_BASE	; If no error, run the code read in from the SD card
 
 	JP		SD_ERROR
+endif   ; RETRO
 
 ;--------------------------------------------------------------------------
 ; COMPR <C> - compare two blocks of memory
@@ -763,7 +813,11 @@ DUMP:
 .DMPLINE:
 	PUSH	HL				; Save start address
 	CALL	CRLF
+
+if RETRO
 	CALL	DSPBANK			; Display current SRAM bank
+endif   ; RETRO
+
 	CALL	PTAD1			; Display current address
 	CALL	SPCE			; Add an extra space
 	LD		C,8				; 8 locations per line
@@ -874,6 +928,7 @@ EXEC:
 ;--------------------------------------------------------------------------
 HELP:
 	CALL	DSPMSG
+if  RETRO
 	DEFB	CR,LF,'A -> D select low 32k RAM bank',CR,LF
 	DEFB	'B -> Boot SD partition',CR,LF
 	DEFB	'C -> SSSS FFFF DDDD compare block',CR,LF
@@ -904,6 +959,9 @@ HELP:
 	DEFB	'<DDDD>Destination Address <D/DD>Data <PP>Port',CR,LF
 	DEFB	'<BBBB BBBB>32-bit SD Block <LLLL>Location Address',CR,LF
 	DEFB	'<CCCC>Size <Esc/Ctrl-c>Abort <Space>Pause',CR,BIT7+LF
+else ; RETRO
+    DEFB    CR,LF,'RTFM',CR,BIT7+LF
+endif ; RETRO
 
 	RET
 
@@ -1112,7 +1170,7 @@ HEXLOAD:
 ;	[n] = number of T states, 51 T states @ 10Mhz = 5.1us
 ;	250msec ~ 0xBF70 loop cycles
 .FLUSH:
-	IN		A,(ADTA)		; Clear possible received char
+	IN		A,(ARX)		    ; Clear possible received char
 	LD		DE,0xBF70		; 250msec delay
 
 .FLSHLP:
@@ -1251,6 +1309,8 @@ CHKSUM:
 	LD		A,B				; A = checksum
 	JP		PT2				; Display checksum and tail call exit
 
+
+if RETRO
 ;--------------------------------------------------------------------------
 ; SDREAD <R> - read one SD block (512 bytes)
 ;--------------------------------------------------------------------------
@@ -1275,6 +1335,7 @@ SDREAD:
 	RET		Z				; Return to command loop if no error
 
 	JP		SD_ERROR
+endif   ; RETRO
 
 ;--------------------------------------------------------------------------
 ; SRCH1 <S> - search for one byte
@@ -1469,6 +1530,9 @@ CLRBRK:
 	LD		(HL),A			; Replace original byte
 	RET
 
+
+
+if RETRO
 ;--------------------------------------------------------------------------
 ; SDWRT <W> - write one SD block (512 bytes)
 ;--------------------------------------------------------------------------
@@ -1497,7 +1561,9 @@ SDWRT:
 	RET		Z				; Return to command loop if no error
 
 	JP		SD_ERROR
+endif  ; RETRO
 
+if RETRO
 ;--------------------------------------------------------------------------
 ; BLOAD <Y> - load a binary file
 ;--------------------------------------------------------------------------
@@ -1518,7 +1584,7 @@ BLOAD:
 	AND		RDA				; Data available?
 	JR		Z,.BLOAD1		; Loop if not
 
-	IN		A,(ADTA)		; Read byte
+	IN		A,(ARX)		    ; Read byte
 	LD		(HL),A			;	and save
 	INC		HL				; Address counter
 
@@ -1555,7 +1621,7 @@ BDUMP:
 	JR		Z,.BDUMP1		; Loop if not
 
 	LD		A,(HL)			; Get byte
-	OUT		(ADTA),A		;	and send
+	OUT		(ATX),A		    ;	and send
 	INC		HL				; Address counter
 
 	DEC		DE				; Byte counter
@@ -1563,6 +1629,7 @@ BDUMP:
 	OR		E				; Check if done
 	JR		NZ,.BDUMP1
 	RET
+endif  ; RETRO
 
 ;**************************************************************************
 ;
@@ -1640,7 +1707,7 @@ PTCN:
 
 	POP		AF				; Recover AF
 	AND		0x7F			; Get rid of MSB
-	OUT		(ADTA),A		; And display it
+	OUT		(ATX),A		    ; And display it
 	RET
 
 ;--------------------------------------------------------------------------
@@ -1705,7 +1772,7 @@ CNTLC:
 	AND		RDA
 	RET		Z				; No, exit with zero true
 
-	IN		A,(ADTA)		; Get the character
+	IN		A,(ARX)		    ; Get the character
 	AND		0x7F			; Strip off MSB
 
 	CP		CTRLC
@@ -1724,6 +1791,7 @@ CRLF:
 	LD		A,LF
 	JP		PTCN			; Tail call exit
 
+if RETRO
 ;--------------------------------------------------------------------------
 ; DSPBANK - display the currently selected 32K RAM bank
 ;	using the address in HL
@@ -1745,6 +1813,7 @@ DSPBANK:
 	CALL	BINL			; Display low nibble
 	CALL	SPCE			; Add a space
 	RET
+endif  ; RETRO
 
 ;--------------------------------------------------------------------------
 ; DSPMSG - display in-line message. String terminated by byte
@@ -1791,8 +1860,10 @@ DUMPREGS:
 	DEFB	' @BC @DE @HL @SP',CR,BIT7+LF
 
 	LD		HL,(.PCTEMP)
+if RETRO
 	CALL	DSPBANK			; Display currently selected 32K RAM bank
 	CALL	SPCE
+endif   ; RETRO
 	CALL	PTAD1			; Then display PC
 
 	POP		HL				; Transfer AF -> HL pushed on above
@@ -1867,8 +1938,10 @@ DUMPREGS:
 	LD		B,16			; Show last 16 bytes of the stack
 
 .DSTACK:
+if RETRO
 	CALL	SPCE
 	CALL	DSPBANK			; Display current RAM bank from address in HL
+endif ; RETRO
 	CALL	SPCE
 	CALL	PTAD1			; Display current stack address from HL
 	CALL	SPCE
@@ -2101,10 +2174,11 @@ GETCON:
 	AND		RDA				; Data available?
 	JR		Z,GETCON
 
-	IN		A,(ADTA)		; Read from keyboard
+	IN		A,(ARX)		    ; Read from keyboard
 	AND		0x7F			; Strip off MSB
 	RET
 
+if RETRO
 ;**************************************************************************
 ;
 ;					S D  C A R D  S U B R O U T I N E S
@@ -2937,6 +3011,7 @@ SPI_WRITE_STR:
 	INC		HL				; Point to the next byte
 	DJNZ	SPI_WRITE_STR	; Count the byte & continue if not done
 	RET
+endif   ; RETRO
 
 ;**************************************************************************
 ;
@@ -2945,15 +3020,21 @@ SPI_WRITE_STR:
 ;**************************************************************************
 
 ; Temporary storage area (21D bytes)
+if RETRO
 GPIO_OUT_CACHE:	DEFB	GPIO_OUT_SD_MOSI|GPIO_OUT_SD_SSEL|GPIO_OUT_PRN_STB|(.BANK<<4)
 .CBANK:			DEFB	.BANK	; Current low 32K RAM bank selected 0-E
+endif   ; RETRO
+
 .AFTEMP:		DEFS	2		; AF temp
 .BCTEMP:		DEFS	2		; BC temp
 .DETEMP:		DEFS	2		; DE temp
 .HLTEMP:		DEFS	2		; HL temp
 .PCTEMP:		DEFS	2		; PC temp
 .SPTEMP:		DEFS	2		; SP temp
+if RETRO
 .PARTITION:		DEFS	1		; Partition number to boot
+endif   ; RETRO
+
 .BP_TABLE:		DEFS	3		; Breakpoint location first, then byte at loc
 .PORT_RW:		DEFS	3		; Area for port read/write commands
 
