@@ -20,11 +20,7 @@
 ;
 ;**************************************************************************
 
-; On reset, the ROM at 0000h is enabled and the RAM at the same address is disabled.
-; This remains until the first time that the RAM at address 0800h is read (or written),
-; at which point the ROM is disabled and the RAM at address 0000h is enabled.
-; Observation: It is not possible to copy the boot ROM into the RAM at address 0.
-
+; This will echo characters received from the UART 1.
 
 U1RX:   equ     80h             ; UART 1 RX data
 U1ST:   equ     81h             ; UART 1 status port
@@ -36,7 +32,6 @@ U2TX:   equ     85h
 
 STKTOP: equ     8000h           ; end of first RAM card
 
-
         ORG     0000h
 
 start:
@@ -44,36 +39,25 @@ start:
         ld      sp,STKTOP       ; config a useful stack
 
 loop:
-        ld      hl,msg          ; HL = @ of message to print
-        call    pstr            ; print it
 
-        ld      hl,0            ; pause a moment
-delay:
-        dec     hl
-        ld      a,h
-        or      l
-        jp      nz,delay
+        ; wait for RX ready
+rxwait:
+        in      a,(U1ST)        ; get the UART status
+        and     80h             ; is the RX ready bit set?
+        jp      z,rxwait        ; no? wait
 
-        jp      loop            ; go back & print again
+        in      a,(U1RX)
+        ld      c,a
 
-
-; Print the 0-terminated string starting at address in HL
-pstr:
-        ld      a,(HL)          ; get the byte we want to print
-        or      a               ; is the char to print zero?
-        ret     z               ; if yes then done
-pswait:
+        ; wait for TX ready
+txwait:
         in      a,(U1ST)        ; get the UART status
         and     01h             ; is the TX ready bit set?
-        jp      z,pswait        ; no? wait
+        jp      z,txwait        ; no? wait
 
-        ld      a,(hl)          ; re-get the byte to print
+        ld      a,c
         out     (U1TX),a        ; print it
-        inc     hl              ; point to next byte in the message
-        jp      pstr            ; go back & print more
 
+        jp      loop
 
-msg:    ; a message we want to print
-        db      0dh,0ah,"Miracles can happen!",0
-
-        ds      0800h-$,0ffh          ; padd to 2KB with FF
+        ds      0800h-$,0ffh    ; padd to 2KB with FF
