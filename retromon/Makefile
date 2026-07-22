@@ -1,6 +1,8 @@
 # Makefile for building the Z80-Retro! monitor - retromon.asm
 # and a simple stack test routine - stack_test.asm
 
+all: retromon
+
 retromon: retromon.bin
 stack_test: stack_test.bin
 retromon.sym: retromon.bin
@@ -23,3 +25,5 @@ erase:
 
 clean:
 	rm -f *.lst *.sym *.bin *.hex
+
+world: clean all
