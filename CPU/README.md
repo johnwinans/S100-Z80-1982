@@ -5,5 +5,5 @@ This board uses a Z80 S-100 bus interface based on that used in the
 
 A marked up schematic and notes describing how my board implementation came to be
 can be found in:
-- [ct-804-markup.pdf](./ct-804-markup.pdf)
-- [notes.pdf](./notes.pdf)
+- [ct-804-markup.pdf](./ct-804-markup.pdf?raw=true)
+- [notes.pdf](./notes.pdf?raw=true)
